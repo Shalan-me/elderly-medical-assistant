@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { logout } from './actions'
 
@@ -15,6 +16,9 @@ export default async function DashboardPage() {
         <p>You are logged in as:</p>
         <p className="user-email">{data.user.email}</p>
         <p>This is your dashboard. More features will be added here soon.</p>
+        <Link className="primary-button action-link" href="/records">
+          View medical records
+        </Link>
         <form action={logout}>
           <button className="secondary-button" type="submit">Log out</button>
         </form>

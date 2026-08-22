@@ -18,7 +18,7 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
-button, input { font: inherit; }
+button, input, select { font: inherit; }
 
 .auth-page, .dashboard-page {
   min-height: 100vh;
@@ -91,3 +91,102 @@ button:disabled, input:disabled { cursor: not-allowed; opacity: .65; }
 .auth-switch { margin: 28px 0 0; font-size: 1.125rem; }
 .auth-switch a { color: #174ea6; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
 .user-email { overflow-wrap: anywhere; color: #12386b; font-weight: 700; }
+
+.records-page {
+  min-height: 100vh;
+  padding: clamp(20px, 5vw, 48px);
+  background: #eef4f8;
+}
+
+.records-shell {
+  width: min(100%, 960px);
+  margin: 0 auto;
+}
+
+.records-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 28px;
+}
+
+.records-header h1 { margin-bottom: 0; }
+
+.records-card {
+  margin-bottom: 28px;
+  padding: clamp(24px, 5vw, 40px);
+  border: 2px solid #172b4d;
+  border-radius: 16px;
+  background: #fff;
+}
+
+.records-card h2 {
+  margin: 0 0 12px;
+  color: #102a43;
+  font-size: 1.75rem;
+}
+
+.records-card > p { font-size: 1.125rem; line-height: 1.5; }
+
+.field-group select {
+  min-height: 58px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 2px solid #52667a;
+  border-radius: 8px;
+  color: #111;
+  background: #fff;
+  font-size: 1.25rem;
+}
+
+.field-group select:focus-visible {
+  outline: 4px solid #ffbf47;
+  outline-offset: 3px;
+}
+
+.field-help { margin: 0; color: #40566b; font-size: 1rem; }
+.text-link { color: #174ea6; font-size: 1.125rem; font-weight: 700; text-decoration: underline; }
+.records-list { display: grid; gap: 18px; margin: 24px 0 0; padding: 0; list-style: none; }
+
+.record-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 20px;
+  border: 2px solid #b8c7d3;
+  border-radius: 10px;
+}
+
+.record-item h3 { margin: 0 0 8px; font-size: 1.25rem; overflow-wrap: anywhere; }
+.record-item p { margin: 4px 0; font-size: 1.05rem; }
+.record-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+
+.action-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  text-decoration: none;
+}
+
+.danger-button {
+  min-height: 58px;
+  padding: 12px 24px;
+  border: 2px solid #8f1515;
+  border-radius: 8px;
+  color: #7f1d1d;
+  background: #fff;
+  font-size: 1.25rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.danger-button:hover { background: #fff1f1; }
+.empty-state { padding: 20px; border-radius: 8px; background: #eef4f8; }
+
+@media (max-width: 640px) {
+  .records-header, .record-item { align-items: stretch; flex-direction: column; }
+  .record-actions, .record-actions > * { width: 100%; }
+}

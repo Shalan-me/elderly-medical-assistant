@@ -12,15 +12,82 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+button, input { font: inherit; }
+
+.auth-page, .dashboard-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #eef4f8;
+}
+
+.auth-card, .dashboard-card {
+  width: min(100%, 560px);
+  padding: clamp(28px, 6vw, 48px);
+  border: 2px solid #172b4d;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgb(23 43 77 / 12%);
+}
+
+.eyebrow { margin: 0 0 8px; color: #174ea6; font-size: 1.125rem; font-weight: 700; }
+h1 { margin: 0 0 16px; color: #102a43; font-size: clamp(2.25rem, 7vw, 3rem); line-height: 1.1; }
+.auth-intro, .dashboard-card > p { font-size: 1.25rem; line-height: 1.55; }
+.auth-form { display: grid; gap: 24px; margin-top: 28px; }
+.field-group { display: grid; gap: 8px; }
+.field-group label { color: #102a43; font-size: 1.25rem; font-weight: 700; }
+
+.field-group input {
+  min-height: 58px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 2px solid #52667a;
+  border-radius: 8px;
+  color: #111;
+  background: #fff;
+  font-size: 1.25rem;
+}
+
+.field-group input:focus-visible, button:focus-visible, a:focus-visible {
+  outline: 4px solid #ffbf47;
+  outline-offset: 3px;
+}
+
+.primary-button, .secondary-button {
+  min-height: 58px;
+  padding: 12px 24px;
+  border: 2px solid #12386b;
+  border-radius: 8px;
+  font-size: 1.25rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.primary-button { color: #fff; background: #174ea6; }
+.secondary-button { margin-top: 16px; color: #12386b; background: #fff; }
+.primary-button:hover { background: #12386b; }
+.secondary-button:hover { background: #e4edf7; }
+button:disabled, input:disabled { cursor: not-allowed; opacity: .65; }
+
+.form-alert {
+  margin: 0;
+  padding: 14px;
+  border: 2px solid;
+  border-radius: 8px;
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.error-alert { border-color: #9b1c1c; color: #7f1d1d; background: #fff1f1; }
+.success-alert { border-color: #166534; color: #14532d; background: #f0fdf4; }
+.auth-switch { margin: 28px 0 0; font-size: 1.125rem; }
+.auth-switch a { color: #174ea6; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+.user-email { overflow-wrap: anywhere; color: #12386b; font-weight: 700; }

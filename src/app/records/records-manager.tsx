@@ -9,9 +9,11 @@ export type MedicalRecord = {
   id: string
   file_name: string
   storage_path: string
-  document_type: string
+  document_type: string | null
   document_date: string | null
   created_at: string
+  processing_status: 'processing' | 'completed' | 'failed'
+  processing_error: string | null
 }
 
 const BUCKET = 'medical-records'
@@ -90,11 +92,11 @@ export function RecordsManager({
           user_id: userData.user.id,
           file_name: file.name,
           storage_path: storagePath,
-          document_type: documentType,
+          document_type: documentType || null,
           document_date: documentDate,
         })
         .select(
-          'id, file_name, storage_path, document_type, document_date, created_at',
+          'id, file_name, storage_path, document_type, document_date, created_at, processing_status, processing_error',
         )
         .single()
 
@@ -105,7 +107,40 @@ export function RecordsManager({
 
       setVisibleRecords((currentRecords) => [newRecord, ...currentRecords])
       formRef.current?.reset()
-      setMessage('Your medical record was uploaded successfully.')
+      setMessage('Your record was uploaded and is being processed.')
+
+      const processingResponse = await fetch(`/api/records/${newRecord.id}/process`, {
+        method: 'POST',
+      })
+      const processingResult = (await processingResponse.json()) as {
+        record?: MedicalRecord
+        error?: string
+        overviewWarning?: string | null
+      }
+
+      if (!processingResponse.ok || !processingResult.record) {
+        setVisibleRecords((currentRecords) =>
+          currentRecords.map((currentRecord) =>
+            currentRecord.id === newRecord.id
+              ? {
+                  ...currentRecord,
+                  processing_status: 'failed',
+                  processing_error: processingResult.error ?? 'AI processing failed.',
+                }
+              : currentRecord,
+          ),
+        )
+        setError(`The file was uploaded, but AI processing failed: ${processingResult.error ?? 'Please try again later.'}`)
+        setMessage('')
+        return
+      }
+
+      setVisibleRecords((currentRecords) =>
+        currentRecords.map((currentRecord) =>
+          currentRecord.id === newRecord.id ? processingResult.record! : currentRecord,
+        ),
+      )
+      setMessage(processingResult.overviewWarning ?? 'Your medical record was processed successfully.')
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : 'Upload failed. Please try again.')
     } finally {
@@ -165,14 +200,15 @@ export function RecordsManager({
             </div>
             <div className="field-group">
               <label htmlFor="document-type">Document type</label>
-              <select id="document-type" name="document-type" required disabled={isUploading} defaultValue="">
-                <option value="" disabled>Select a document type</option>
+              <select id="document-type" name="document-type" disabled={isUploading} defaultValue="">
+                <option value="">Not sure — let AI determine it</option>
                 <option value="Lab result">Lab result</option>
                 <option value="Prescription">Prescription</option>
                 <option value="Visit summary">Visit summary</option>
                 <option value="Imaging">Imaging</option>
                 <option value="Other">Other</option>
               </select>
+              <p className="field-help">Optional. Choose “Not sure” to let AI determine it.</p>
             </div>
             <div className="field-group">
               <label htmlFor="document-date">Document date</label>
@@ -180,7 +216,7 @@ export function RecordsManager({
               <p className="field-help">Optional</p>
             </div>
             <button className="primary-button" type="submit" disabled={isUploading}>
-              {isUploading ? 'Uploading…' : 'Upload record'}
+              {isUploading ? 'Uploading and processing…' : 'Upload record'}
             </button>
           </form>
         </section>
@@ -198,8 +234,14 @@ export function RecordsManager({
                 <li className="record-item" key={record.id}>
                   <div>
                     <h3>{record.file_name}</h3>
-                    <p>{record.document_type}</p>
+                    <p>{record.document_type || 'Document type not determined yet'}</p>
                     <p>{record.document_date ? formatDate(record.document_date) : 'No document date'}</p>
+                    <p className={`status-badge status-${record.processing_status}`}>
+                      AI status: {record.processing_status}
+                    </p>
+                    {record.processing_status === 'failed' && record.processing_error && (
+                      <p className="record-error">{record.processing_error}</p>
+                    )}
                   </div>
                   <div className="record-actions">
                     <a className="primary-button action-link" href={`/records/${record.id}`} target="_blank" rel="noopener noreferrer">Open record</a>

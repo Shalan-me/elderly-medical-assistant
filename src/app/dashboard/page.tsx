@@ -19,6 +19,9 @@ export default async function DashboardPage() {
         <Link className="primary-button action-link" href="/records">
           View medical records
         </Link>
+        <Link className="secondary-button action-link" href="/overview">
+          View medical overview
+        </Link>
         <form action={logout}>
           <button className="secondary-button" type="submit">Log out</button>
         </form>

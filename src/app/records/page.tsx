@@ -11,7 +11,7 @@ export default async function RecordsPage() {
 
   const { data, error } = await supabase
     .from('medical_records')
-    .select('id, file_name, storage_path, document_type, document_date, created_at')
+    .select('id, file_name, storage_path, document_type, document_date, created_at, processing_status, processing_error')
     .order('created_at', { ascending: false })
 
   if (error) {

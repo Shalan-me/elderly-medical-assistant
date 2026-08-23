@@ -252,6 +252,25 @@ button:disabled, input:disabled { cursor: not-allowed; opacity: .65; }
   border-radius: 12px;
 }
 
+.suggestion-list { display: grid; gap: 16px; margin: 22px 0 0; padding: 0; list-style: none; }
+.suggestion-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 20px;
+  border: 2px solid #7a8fa3;
+  border-radius: 12px;
+  background: #f8fbff;
+}
+
+.suggestion-item h3 { margin: 0 0 12px; color: #102a43; font-size: 1.35rem; }
+.suggestion-details { display: grid; gap: 7px; margin: 0; }
+.suggestion-details div { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 12px; font-size: 1.1rem; line-height: 1.45; }
+.suggestion-details dt { font-weight: 800; }
+.suggestion-details dd { margin: 0; overflow-wrap: anywhere; }
+.suggestion-review-note { padding: 14px; border-left: 5px solid #174ea6; background: #e8f1ff; font-size: 1.15rem !important; }
+
 .compact-button { min-height: 50px; margin-top: 0; padding: 8px 18px; }
 .medication-form { display: grid; gap: 28px; margin-top: 24px; }
 .medication-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
@@ -295,6 +314,9 @@ button:disabled, input:disabled { cursor: not-allowed; opacity: .65; }
   .dose-time { font-size: 1.5rem; }
   .taken-status { text-align: left; }
   .medication-item { align-items: stretch; flex-direction: column; }
+  .suggestion-item { align-items: stretch; flex-direction: column; }
+  .suggestion-item > .primary-button { width: 100%; }
+  .suggestion-details div { grid-template-columns: 1fr; gap: 2px; }
   .medication-form-grid { grid-template-columns: 1fr; }
   .medication-form-wide { grid-column: auto; }
   .schedule-time-row { grid-template-columns: 1fr; }

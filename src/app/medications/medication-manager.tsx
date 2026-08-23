@@ -41,6 +41,20 @@ export type SourceRecord = {
   document_date: string | null
 }
 
+export type MedicationSuggestion = {
+  id: string
+  name: string
+  dosage: string
+  frequency: string
+  instructions: string | null
+  source_record_id: string
+  source_file_name: string
+}
+
+function normalize(value: string) {
+  return value.trim().toLocaleLowerCase().replace(/\s+/g, ' ')
+}
+
 function localDateString() {
   const now = new Date()
   const year = now.getFullYear()
@@ -70,12 +84,14 @@ export function MedicationManager({
   initialSchedules,
   initialLogs,
   sourceRecords,
+  medicationSuggestions,
   initialError,
 }: {
   initialMedications: Medication[]
   initialSchedules: MedicationSchedule[]
   initialLogs: MedicationLog[]
   sourceRecords: SourceRecord[]
+  medicationSuggestions: MedicationSuggestion[]
   initialError: string
 }) {
   const formSectionRef = useRef<HTMLElement>(null)
@@ -83,6 +99,8 @@ export function MedicationManager({
   const [schedules, setSchedules] = useState(initialSchedules)
   const [logs, setLogs] = useState(initialLogs)
   const [editingMedication, setEditingMedication] = useState<Medication | null>(null)
+  const [selectedSuggestion, setSelectedSuggestion] =
+    useState<MedicationSuggestion | null>(null)
   const [scheduleTimes, setScheduleTimes] = useState(['08:00'])
   const [error, setError] = useState(initialError)
   const [message, setMessage] = useState('')
@@ -110,6 +128,23 @@ export function MedicationManager({
       )
   }, [medications, schedules, today])
 
+  const visibleSuggestions = useMemo(
+    () =>
+      medicationSuggestions.filter(
+        (suggestion) =>
+          !medications.some(
+            (medication) =>
+              (medication.source_record_id === suggestion.source_record_id &&
+                normalize(medication.name) === normalize(suggestion.name)) ||
+              (normalize(medication.name) === normalize(suggestion.name) &&
+                normalize(medication.dosage) === normalize(suggestion.dosage) &&
+                normalize(medication.frequency) ===
+                  normalize(suggestion.frequency)),
+          ),
+      ),
+    [medicationSuggestions, medications],
+  )
+
   function clearNotices() {
     setError('')
     setMessage('')
@@ -117,16 +152,30 @@ export function MedicationManager({
 
   function resetForm() {
     setEditingMedication(null)
+    setSelectedSuggestion(null)
     setScheduleTimes(['08:00'])
   }
 
   function beginEdit(medication: Medication) {
     clearNotices()
+    setSelectedSuggestion(null)
     setEditingMedication(medication)
     const medicationTimes = schedules
       .filter((schedule) => schedule.medication_id === medication.id)
       .map((schedule) => schedule.scheduled_time.slice(0, 5))
     setScheduleTimes(medicationTimes.length ? medicationTimes : ['08:00'])
+    requestAnimationFrame(() =>
+      formSectionRef.current?.scrollIntoView({ behavior: 'smooth' }),
+    )
+  }
+
+  function reviewSuggestion(suggestion: MedicationSuggestion) {
+    clearNotices()
+    setEditingMedication(null)
+    setSelectedSuggestion(suggestion)
+    // Exact dose times are not part of the extracted medication data.
+    // Leave the field blank so the user must choose a time.
+    setScheduleTimes([''])
     requestAnimationFrame(() =>
       formSectionRef.current?.scrollIntoView({ behavior: 'smooth' }),
     )
@@ -219,7 +268,12 @@ export function MedicationManager({
             )
             .select('id, medication_id, scheduled_time')
         : { data: [], error: null }
-      if (scheduleError) throw scheduleError
+      if (scheduleError) {
+        if (!editingMedication) {
+          await supabase.from('medications').delete().eq('id', savedMedication.id)
+        }
+        throw scheduleError
+      }
       const savedSchedules = [
         ...retainedSchedules,
         ...((insertedSchedules ?? []) as MedicationSchedule[]),
@@ -396,6 +450,42 @@ export function MedicationManager({
           )}
         </section>
 
+        <section className="records-card" aria-labelledby="suggested-heading">
+          <h2 id="suggested-heading">Suggested from your medical records</h2>
+          <p>
+            Review each suggestion before adding it. You will choose the exact
+            schedule times yourself.
+          </p>
+          {visibleSuggestions.length === 0 ? (
+            <p className="empty-state">There are no new medication suggestions.</p>
+          ) : (
+            <ul className="suggestion-list">
+              {visibleSuggestions.map((suggestion) => (
+                <li className="suggestion-item" key={suggestion.id}>
+                  <div>
+                    <h3>{suggestion.name}</h3>
+                    <dl className="suggestion-details">
+                      <div><dt>Dosage</dt><dd>{suggestion.dosage || 'Not documented'}</dd></div>
+                      <div><dt>Frequency</dt><dd>{suggestion.frequency || 'Not documented'}</dd></div>
+                      {suggestion.instructions && (
+                        <div><dt>Instructions</dt><dd>{suggestion.instructions}</dd></div>
+                      )}
+                      <div><dt>Source record</dt><dd>{suggestion.source_file_name}</dd></div>
+                    </dl>
+                  </div>
+                  <button
+                    className="primary-button"
+                    type="button"
+                    onClick={() => reviewSuggestion(suggestion)}
+                  >
+                    Add to schedule
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
         <section className="records-card" aria-labelledby="active-heading">
           <h2 id="active-heading">Active medications</h2>
           {medications.filter((medication) => medication.active).length === 0 ? (
@@ -421,24 +511,36 @@ export function MedicationManager({
         </section>
 
         <section ref={formSectionRef} className="records-card" aria-labelledby="add-heading">
-          <h2 id="add-heading">{editingMedication ? 'Edit medication' : 'Add medication'}</h2>
-          <form key={editingMedication?.id ?? 'new'} className="medication-form" onSubmit={handleSave}>
+          <h2 id="add-heading">
+            {editingMedication
+              ? 'Edit medication'
+              : selectedSuggestion
+                ? 'Review suggested medication'
+                : 'Add medication'}
+          </h2>
+          {selectedSuggestion && (
+            <p className="suggestion-review-note">
+              Review the extracted details and choose at least one exact time.
+              No schedule will be created until you save this form.
+            </p>
+          )}
+          <form key={editingMedication?.id ?? selectedSuggestion?.id ?? 'new'} className="medication-form" onSubmit={handleSave}>
             <div className="medication-form-grid">
               <div className="field-group">
                 <label htmlFor="name">Medication name</label>
-                <input id="name" name="name" required defaultValue={editingMedication?.name} />
+                <input id="name" name="name" required defaultValue={editingMedication?.name ?? selectedSuggestion?.name} />
               </div>
               <div className="field-group">
                 <label htmlFor="dosage">Dosage</label>
-                <input id="dosage" name="dosage" required placeholder="For example, 10 mg" defaultValue={editingMedication?.dosage} />
+                <input id="dosage" name="dosage" required placeholder="For example, 10 mg" defaultValue={editingMedication?.dosage ?? selectedSuggestion?.dosage} />
               </div>
               <div className="field-group">
                 <label htmlFor="frequency">Frequency</label>
-                <input id="frequency" name="frequency" required placeholder="For example, twice daily" defaultValue={editingMedication?.frequency} />
+                <input id="frequency" name="frequency" required placeholder="For example, twice daily" defaultValue={editingMedication?.frequency ?? selectedSuggestion?.frequency} />
               </div>
               <div className="field-group">
                 <label htmlFor="instructions">Instructions</label>
-                <input id="instructions" name="instructions" placeholder="For example, take with food" defaultValue={editingMedication?.instructions ?? ''} />
+                <input id="instructions" name="instructions" placeholder="For example, take with food" defaultValue={editingMedication?.instructions ?? selectedSuggestion?.instructions ?? ''} />
               </div>
               <div className="field-group">
                 <label htmlFor="start-date">Start date</label>
@@ -451,7 +553,19 @@ export function MedicationManager({
               </div>
               <div className="field-group medication-form-wide">
                 <label htmlFor="source-record">Source medical record</label>
-                <select id="source-record" name="source-record" defaultValue={editingMedication?.source_record_id ?? ''}>
+                {selectedSuggestion && (
+                  <input
+                    type="hidden"
+                    name="source-record"
+                    value={selectedSuggestion.source_record_id}
+                  />
+                )}
+                <select
+                  id="source-record"
+                  name={selectedSuggestion ? undefined : 'source-record'}
+                  disabled={Boolean(selectedSuggestion)}
+                  defaultValue={editingMedication?.source_record_id ?? selectedSuggestion?.source_record_id ?? ''}
+                >
                   <option value="">None — entered manually</option>
                   {sourceRecords.map((record) => <option key={record.id} value={record.id}>{record.file_name}</option>)}
                 </select>
@@ -461,7 +575,10 @@ export function MedicationManager({
 
             <fieldset className="schedule-fieldset">
               <legend>Scheduled times</legend>
-              <p>Add one or more times for this medication.</p>
+              <p>
+                Add one or more exact times for this medication. Frequency text
+                is not used to guess schedule times.
+              </p>
               {scheduleTimes.map((time, index) => (
                 <div className="schedule-time-row" key={index}>
                   <label htmlFor={`schedule-time-${index}`}>Time {index + 1}</label>
@@ -479,7 +596,7 @@ export function MedicationManager({
 
             <div className="form-actions">
               <button className="primary-button" type="submit" disabled={isSaving}>{isSaving ? 'Saving…' : editingMedication ? 'Save changes' : 'Add medication'}</button>
-              {editingMedication && <button className="secondary-button" type="button" onClick={resetForm}>Cancel editing</button>}
+              {(editingMedication || selectedSuggestion) && <button className="secondary-button" type="button" onClick={resetForm}>Cancel</button>}
             </div>
           </form>
         </section>

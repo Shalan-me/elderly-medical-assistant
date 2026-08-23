@@ -12,5 +12,6 @@ export const config = {
     '/records/:path*',
     '/overview/:path*',
     '/medications/:path*',
+    '/chat/:path*',
   ],
 }

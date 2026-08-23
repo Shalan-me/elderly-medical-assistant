@@ -4,6 +4,7 @@ import {
   extractMedicalRecord,
   regenerateMedicalOverview,
 } from '@/lib/openai/medical-processing'
+import { indexMedicalRecord } from '@/lib/openai/medical-rag'
 import { createClient } from '@/lib/supabase/server'
 
 export const runtime = 'nodejs'
@@ -58,15 +59,37 @@ export async function POST(
           : null,
     })
 
+    const resolvedDocumentType =
+      record.document_type && record.document_type !== 'Not sure'
+        ? record.document_type
+        : extracted.document_type
+    const resolvedDocumentDate = record.document_date ?? extracted.document_date
+
+    const { error: extractedDataError } = await supabase
+      .from('medical_records')
+      .update({
+        document_type: resolvedDocumentType,
+        document_date: resolvedDocumentDate,
+        extracted_data: extracted,
+      })
+      .eq('id', id)
+    if (extractedDataError) throw extractedDataError
+
+    await indexMedicalRecord({
+      supabase,
+      userId: userData.user.id,
+      record: {
+        id: record.id,
+        file_name: record.file_name,
+        document_type: resolvedDocumentType,
+        document_date: resolvedDocumentDate,
+      },
+      extracted,
+    })
+
     const { data: updatedRecord, error: updateError } = await supabase
       .from('medical_records')
       .update({
-        document_type:
-          record.document_type && record.document_type !== 'Not sure'
-            ? record.document_type
-            : extracted.document_type,
-        document_date: record.document_date ?? extracted.document_date,
-        extracted_data: extracted,
         processing_status: 'completed',
         processing_error: null,
         processed_at: new Date().toISOString(),

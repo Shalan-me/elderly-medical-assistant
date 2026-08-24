@@ -136,7 +136,12 @@ export function TodaysMedicationsCard({
                 </div>
                 <div className="dashboard-dose-details">
                   <h3>{medication.name}</h3>
-                  <p>{medication.dosage}</p>
+                  <p>
+                    {medication.dosage}
+                    <span className="mobile-dose-time">
+                      {' · '}{displayTime(schedule.scheduled_time)}
+                    </span>
+                  </p>
                 </div>
                 {log ? (
                   <div className="dashboard-taken-status">
@@ -157,6 +162,12 @@ export function TodaysMedicationsCard({
             )
           })}
         </ul>
+      )}
+
+      {doses.length > 2 && (
+        <p className="dashboard-more-doses">
+          +{doses.length - 2} more {doses.length - 2 === 1 ? 'dose' : 'doses'} today
+        </p>
       )}
 
       {error && <p className="form-alert error-alert dashboard-dose-error" role="alert">{error}</p>}

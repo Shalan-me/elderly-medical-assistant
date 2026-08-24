@@ -79,7 +79,7 @@ export default async function DashboardPage() {
             loadError={Boolean(medications.error || schedules.error || logs.error)}
           />
 
-          <article className="home-card">
+          <article className="home-card dashboard-compact-card">
             <p className="home-card-kicker">At a glance</p>
             <h2>Medical overview</h2>
             <p>
@@ -90,11 +90,12 @@ export default async function DashboardPage() {
                   : 'No overview yet. Upload a record to create one.'}
             </p>
             <Link className="secondary-button action-link" href="/overview">
-              View medical overview
+              <span className="desktop-action-label">View medical overview</span>
+              <span className="mobile-action-label">Open</span>
             </Link>
           </article>
 
-          <article className="home-card">
+          <article className="home-card dashboard-compact-card">
             <p className="home-card-kicker">Your files</p>
             <h2>Medical records</h2>
             <p>
@@ -105,21 +106,26 @@ export default async function DashboardPage() {
                   : 'No medical records have been uploaded yet.'}
             </p>
             <Link className="secondary-button action-link" href="/records">
-              View or upload records
+              <span className="desktop-action-label">View or upload records</span>
+              <span className="mobile-action-label">Open</span>
             </Link>
           </article>
 
-          <article className="home-card">
+          <article className="home-card dashboard-compact-card questions-home-card">
             <p className="home-card-kicker">Questions</p>
             <h2>Ask about my records</h2>
             <p>Get a simple answer using information from your uploaded records.</p>
             <Link className="secondary-button action-link" href="/chat">
-              Ask a question
+              <span className="desktop-action-label">Ask a question</span>
+              <span className="mobile-action-label">Ask</span>
             </Link>
           </article>
 
-          <article className="home-card home-card-wide latest-home-card">
-            <p className="home-card-kicker">Latest medical update</p>
+          <article className="home-card home-card-wide dashboard-compact-card latest-home-card">
+            <p className="home-card-kicker">
+              <span className="desktop-latest-label">Latest medical update</span>
+              <span className="mobile-latest-label">Latest update</span>
+            </p>
             {latestRecord.error ? (
               <>
                 <h2>Update unavailable</h2>
@@ -141,7 +147,8 @@ export default async function DashboardPage() {
                   rel="noopener noreferrer"
                   target="_blank"
                 >
-                  View latest record
+                  <span className="desktop-action-label">View latest record</span>
+                  <span className="mobile-action-label">Open</span>
                 </a>
               </>
             ) : (
@@ -149,7 +156,8 @@ export default async function DashboardPage() {
                 <h2>No processed records yet</h2>
                 <p>Your latest update will appear here after a record is processed.</p>
                 <Link className="secondary-button action-link" href="/records">
-                  Add a medical record
+                  <span className="desktop-action-label">Add a medical record</span>
+                  <span className="mobile-action-label">Add record</span>
                 </Link>
               </>
             )}

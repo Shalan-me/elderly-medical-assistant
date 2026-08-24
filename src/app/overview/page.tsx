@@ -8,6 +8,139 @@ function TextList({ items }: { items: string[] }) {
   return items.length ? <ul>{items.map((item) => <li key={item}>{item}</li>)}</ul> : <p>None found in uploaded records.</p>
 }
 
+type OverviewEvent = MedicalOverview['important_medical_events'][number]
+
+function isCarePlanOnly(event: string, date: string | null) {
+  const text = event.trim()
+  const containsHistoricalFact =
+    /\b(?:diagnosed|documented|measured|underwent|performed|started|stopped|changed|increased|decreased|admitted|discharged)\b/i.test(text) ||
+    /\b(?:visit|consultation) (?:occurred|documented|completed)\b/i.test(text) ||
+    /\b\d{2,3}\s*\/\s*\d{2,3}\b/.test(text)
+
+  if (containsHistoricalFact) return false
+
+  if (
+    !date &&
+    /\b(?:follow[- ]?up|return|recheck|next appointment)\b/i.test(text)
+  ) {
+    return true
+  }
+
+  return (
+    /\b(?:recommended|advised|instructed|care plan)\b/i.test(text) ||
+    /^(?:continue|maintain|keep taking|return|recheck|schedule)\b/i.test(text) ||
+    /^(?:(?:next|future)\s+)?routine follow[- ]?up\b/i.test(text) ||
+    /^(?:next|future)\b.*\b(?:follow[- ]?up|visit|check|appointment)\b/i.test(text) ||
+    /^follow[- ]?up\s+(?:in|with|after|for|recommended|planned|requested|needed)\b/i.test(text) ||
+    /\b(?:should|needs? to)\s+(?:continue|follow|return|schedule)\b/i.test(text)
+  )
+}
+
+function normalizedTextKey(item: string) {
+  return item.trim().toLocaleLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+}
+
+function uniqueText(
+  items: string[],
+  keyFor: (item: string) => string = normalizedTextKey,
+) {
+  const seen = new Set<string>()
+  return items.filter((item) => {
+    const key = keyFor(item)
+    if (!key || seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+function carePlanKey(item: string) {
+  const normalized = normalizedTextKey(item)
+    .replace(/^(?:the )?next /, '')
+    .replace(/follow up/g, 'followup')
+  const interval = normalized.match(
+    /(?:in|within) (\d+)(?: to (\d+))? (day|days|week|weeks|month|months|year|years)/,
+  )
+
+  if (normalized.includes('followup') && interval) {
+    const [, start, end, unit] = interval
+    return `followup:${start}:${end ?? start}:${unit.replace(/s$/, '')}`
+  }
+
+  return normalized
+}
+
+function isSymptomOrFinding(item: string) {
+  const text = item.trim()
+  const symptom =
+    /\b(?:shortness of breath|dyspnea|pain|fatigue|dizziness|nausea|cough|headache|swelling|weakness|palpitations)\b/i
+
+  return (
+    /\b(?:reading|readings|measurement|measurements|symptom|symptoms|finding|findings|observation|observations)\b/i.test(text) ||
+    /\b\d{2,3}\s*\/\s*\d{2,3}(?:\s*mmhg)?\b/i.test(text) ||
+    /\b(?:mmhg|bpm|mg\/dl|mmol\/l)\b/i.test(text) ||
+    symptom.test(text) &&
+      (/^(?:intermittent|persistent|occasional|recurrent|exertional|reported|reports?|history of)\b/i.test(text) ||
+        new RegExp(`^${symptom.source}`, 'i').test(text))
+  )
+}
+
+function eventsBelongToSameVisit(first: string, second: string) {
+  const visitContext = /\b(?:visit|consultation|check[- ]?up|appointment)\b/i
+  const vitalOrFinding =
+    /\b(?:blood pressure|bp|pulse|heart rate|temperature|respiratory rate|oxygen saturation|weight|height|lab|result|finding|mmhg|bpm|mg\/dl|mmol\/l)\b/i
+  const documentedCondition =
+    /\b(?:diagnos(?:is|ed)|condition|first documented)\b/i
+
+  return (
+    visitContext.test(first) ||
+    visitContext.test(second) ||
+    documentedCondition.test(first) && vitalOrFinding.test(second) ||
+    documentedCondition.test(second) && vitalOrFinding.test(first) ||
+    vitalOrFinding.test(first) && vitalOrFinding.test(second)
+  )
+}
+
+function combineSameDateEvents(events: OverviewEvent[]) {
+  const combined: OverviewEvent[] = []
+  const exactDateIndexes = new Map<string, number[]>()
+
+  function conciseEventText(value: string, lowercaseFirst = false) {
+    const concise = value
+      .trim()
+      .replace(/[.;]\s*$/, '')
+      .replace(/\s+(?:at|during) this visit$/i, '')
+
+    return lowercaseFirst && /^[A-Z][a-z]/.test(concise)
+      ? `${concise[0].toLocaleLowerCase()}${concise.slice(1)}`
+      : concise
+  }
+
+  for (const item of events) {
+    const exactDate = item.date?.match(/^(\d{4}-\d{2}-\d{2})(?:T|$)/)?.[1]
+    if (exactDate) {
+      const existingIndex = exactDateIndexes
+        .get(exactDate)
+        ?.find((index) =>
+          eventsBelongToSameVisit(combined[index].event, item.event),
+        )
+      if (existingIndex !== undefined) {
+        const existing = combined[existingIndex]
+        if (!existing.event.toLocaleLowerCase().includes(item.event.toLocaleLowerCase())) {
+          existing.event = `${conciseEventText(existing.event)}; ${conciseEventText(item.event, true)}.`
+        }
+        continue
+      }
+      exactDateIndexes.set(exactDate, [
+        ...(exactDateIndexes.get(exactDate) ?? []),
+        combined.length,
+      ])
+    }
+    combined.push({ ...item })
+  }
+
+  return combined
+}
+
 function formatFriendlyDate(value: string) {
   if (/^\d{4}$/.test(value)) return value
 
@@ -54,6 +187,33 @@ export default async function OverviewPage() {
 
   const overview = overviewResult.data?.overview as MedicalOverview | undefined
   const latestRecord = latestRecordResult.data
+  const carePlanEvents = overview
+    ? overview.important_medical_events.filter((item) =>
+        isCarePlanOnly(item.event, item.date),
+      )
+    : []
+  const importantEvents = overview
+    ? combineSameDateEvents(
+        overview.important_medical_events.filter(
+          (item) => !isCarePlanOnly(item.event, item.date),
+        ),
+      )
+    : []
+  const carePlans = overview
+    ? uniqueText([
+        ...(overview.follow_up_and_care_plans ?? []),
+        ...carePlanEvents.map((item) => item.event),
+      ], carePlanKey)
+    : []
+  const symptomsAndFindings = overview
+    ? uniqueText([
+        ...(overview.symptoms_and_findings ?? []),
+        ...overview.conditions.filter(isSymptomOrFinding),
+      ])
+    : []
+  const conditions = overview
+    ? overview.conditions.filter((item) => !isSymptomOrFinding(item))
+    : []
 
   return (
     <main className="records-page">
@@ -115,12 +275,27 @@ export default async function OverviewPage() {
             <section className="records-card overview-wide"><h2>Your medications</h2>
               {overview.medications.length ? <ul>{overview.medications.map((item, index) => <li key={`${item.name}-${index}`}><strong>{item.name}</strong> — {item.dosage || 'Dosage not listed'}, {item.frequency || 'frequency not listed'}</li>)}</ul> : <p>None found in uploaded records.</p>}
             </section>
-            <section className="records-card"><h2>Your conditions</h2><TextList items={overview.conditions} /></section>
+            <section className="records-card"><h2>Your conditions</h2><TextList items={conditions} /></section>
             <section className="records-card"><h2>Your allergies</h2><TextList items={overview.allergies} /></section>
+            {symptomsAndFindings.length > 0 && (
+              <section className="records-card overview-wide">
+                <h2>Symptoms and findings</h2>
+                <TextList items={symptomsAndFindings} />
+              </section>
+            )}
             <section className="records-card overview-wide"><h2>Previous procedures</h2><TextList items={overview.procedures} /></section>
             <section className="records-card overview-wide"><h2>Important medical events</h2>
-              {overview.important_medical_events.length ? <ul>{overview.important_medical_events.map((item, index) => <li key={`${item.date}-${index}`}><strong>{item.date ? formatFriendlyDate(item.date) : 'Date not documented'}:</strong> {item.event}</li>)}</ul> : <p>None found in uploaded records.</p>}
+              {importantEvents.length ? <ul>{importantEvents.map((item, index) => <li key={`${item.date}-${index}`}><strong>{item.date ? formatFriendlyDate(item.date) : 'Date not documented'}:</strong> {item.event}</li>)}</ul> : <p>None found in uploaded records.</p>}
             </section>
+            {carePlans.length > 0 && (
+              <section className="records-card overview-wide">
+                <h2>Follow-up and care plans</h2>
+                <p className="section-intro">
+                  These instructions were documented in your medical records.
+                </p>
+                <TextList items={carePlans} />
+              </section>
+            )}
           </div>
         )}
       </div>

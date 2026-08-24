@@ -9,6 +9,10 @@ function TextList({ items }: { items: string[] }) {
 }
 
 type OverviewEvent = MedicalOverview['important_medical_events'][number]
+type EventSourceRecord = {
+  document_date: string | null
+  extracted_data: unknown
+}
 
 function isCarePlanOnly(event: string, date: string | null) {
   const text = event.trim()
@@ -128,9 +132,10 @@ function symptomAndFindingPresentationParts(item: string) {
 }
 
 function eventsBelongToSameVisit(first: string, second: string) {
-  const visitContext = /\b(?:visit|consultation|check[- ]?up|appointment)\b/i
+  const visitContext =
+    /\b(?:visit|consultation|check[- ]?up|appointment|evaluation|assessment)\b/i
   const vitalOrFinding =
-    /\b(?:blood pressure|bp|pulse|heart rate|temperature|respiratory rate|oxygen saturation|weight|height|lab|result|finding|mmhg|bpm|mg\/dl|mmol\/l)\b/i
+    /\b(?:blood pressure|bp|pulse|heart rate|temperature|respiratory rate|oxygen saturation|weight|height|lab|result|finding|ecg|electrocardiogram|sinus rhythm|cardiac abnormality|mmhg|bpm|mg\/dl|mmol\/l)\b/i
   const documentedCondition =
     /\b(?:diagnos(?:is|ed)|condition|first documented)\b/i
 
@@ -145,7 +150,6 @@ function eventsBelongToSameVisit(first: string, second: string) {
 
 function combineSameDateEvents(events: OverviewEvent[]) {
   const combined: OverviewEvent[] = []
-  const exactDateIndexes = new Map<string, number[]>()
 
   function conciseEventText(value: string, lowercaseFirst = false) {
     const concise = value
@@ -160,28 +164,128 @@ function combineSameDateEvents(events: OverviewEvent[]) {
 
   for (const item of events) {
     const exactDate = item.date?.match(/^(\d{4}-\d{2}-\d{2})(?:T|$)/)?.[1]
-    if (exactDate) {
-      const existingIndex = exactDateIndexes
-        .get(exactDate)
-        ?.find((index) =>
-          eventsBelongToSameVisit(combined[index].event, item.event),
-        )
-      if (existingIndex !== undefined) {
-        const existing = combined[existingIndex]
-        if (!existing.event.toLocaleLowerCase().includes(item.event.toLocaleLowerCase())) {
-          existing.event = `${conciseEventText(existing.event)}; ${conciseEventText(item.event, true)}.`
-        }
-        continue
+    const previous = combined.at(-1)
+    const previousExactDate = previous?.date
+      ?.match(/^(\d{4}-\d{2}-\d{2})(?:T|$)/)?.[1]
+
+    if (
+      exactDate &&
+      previous &&
+      previousExactDate === exactDate &&
+      eventsBelongToSameVisit(previous.event, item.event)
+    ) {
+      if (!previous.event.toLocaleLowerCase().includes(item.event.toLocaleLowerCase())) {
+        previous.event = `${conciseEventText(previous.event)}; ${conciseEventText(item.event, true)}.`
       }
-      exactDateIndexes.set(exactDate, [
-        ...(exactDateIndexes.get(exactDate) ?? []),
-        combined.length,
-      ])
+      continue
     }
+
     combined.push({ ...item })
   }
 
   return combined
+}
+
+function removeRedundantYearOnlyEvents(events: OverviewEvent[]) {
+  const exactEventsByYear = new Map<string, OverviewEvent[]>()
+  const ignoredWords = new Set([
+    'condition', 'diagnosed', 'documented', 'first', 'history', 'medical',
+    'since', 'this', 'visit', 'with', 'year',
+  ])
+
+  for (const item of events) {
+    const year = item.date?.match(/^(\d{4})-\d{2}-\d{2}(?:T|$)/)?.[1]
+    if (year) {
+      exactEventsByYear.set(year, [
+        ...(exactEventsByYear.get(year) ?? []),
+        item,
+      ])
+    }
+  }
+
+  return events.filter((item) => {
+    const year = item.date?.match(/^(\d{4})$/)?.[1]
+    if (!year || !/\b(?:since|history of|first documented|diagnosed|documented)\b/i.test(item.event)) {
+      return true
+    }
+
+    const meaningfulWords = normalizedTextKey(item.event)
+      .split(' ')
+      .filter((word) => word.length >= 4 && !ignoredWords.has(word) && word !== year)
+
+    return !(exactEventsByYear.get(year) ?? []).some((exactEvent) => {
+      const exactText = normalizedTextKey(exactEvent.event).split(' ')
+      return meaningfulWords.some((word) => exactText.includes(word))
+    })
+  })
+}
+
+function extractedEventText(extractedData: unknown) {
+  if (!extractedData || typeof extractedData !== 'object') return ''
+
+  const events = (extractedData as { important_medical_events?: unknown })
+    .important_medical_events
+  if (!Array.isArray(events)) return ''
+
+  return events
+    .map((item) => {
+      if (!item || typeof item !== 'object') return ''
+      const event = (item as { event?: unknown }).event
+      return typeof event === 'string' ? event : ''
+    })
+    .filter(Boolean)
+    .join(' ')
+}
+
+function eventMatchesSourceRecord(event: string, extractedData: unknown) {
+  const eventText = normalizedTextKey(event)
+  const sourceText = normalizedTextKey(extractedEventText(extractedData))
+  if (!eventText || !sourceText) return false
+  if (sourceText.includes(eventText)) return true
+
+  const measurements = event.match(
+    /\b\d{2,3}\s*\/\s*\d{2,3}(?:\s*mmhg)?\b|\b\d+(?:\.\d+)?\s*(?:mmhg|bpm|mg\/dl|mmol\/l|meq\/l)\b/gi,
+  )
+  if (measurements?.length) {
+    return measurements.every((measurement) =>
+      sourceText.includes(normalizedTextKey(measurement)),
+    )
+  }
+
+  const ignoredWords = new Set([
+    'and', 'assessment', 'documented', 'finding', 'from', 'medical',
+    'record', 'reported', 'result', 'showed', 'that', 'the', 'this',
+    'visit', 'was', 'were', 'with',
+  ])
+  const meaningfulWords = eventText
+    .split(' ')
+    .filter((word) => word.length >= 3 && !ignoredWords.has(word))
+  const matchingWords = meaningfulWords.filter((word) =>
+    sourceText.split(' ').includes(word),
+  )
+
+  return meaningfulWords.length >= 3 &&
+    matchingWords.length >= 3 &&
+    matchingWords.length / meaningfulWords.length >= 0.7
+}
+
+function applyKnownRecordDates(
+  events: OverviewEvent[],
+  records: EventSourceRecord[],
+) {
+  return events.map((item) => {
+    if (item.date) return item
+
+    const matchingRecords = records.filter(
+      (record) =>
+        record.document_date &&
+        eventMatchesSourceRecord(item.event, record.extracted_data),
+    )
+
+    return matchingRecords.length === 1
+      ? { ...item, date: matchingRecords[0].document_date }
+      : item
+  })
 }
 
 function formatFriendlyDate(value: string) {
@@ -214,22 +318,21 @@ export default async function OverviewPage() {
   const { data: userData } = await supabase.auth.getUser()
   if (!userData.user) redirect('/login')
 
-  const [overviewResult, latestRecordResult] = await Promise.all([
+  const [overviewResult, recordsResult] = await Promise.all([
     supabase
       .from('medical_overviews')
       .select('overview, updated_at')
       .maybeSingle(),
     supabase
       .from('medical_records')
-      .select('id, file_name, document_type, document_date, processed_at')
+      .select('id, file_name, document_type, document_date, processed_at, extracted_data')
       .eq('processing_status', 'completed')
       .order('processed_at', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
   ])
 
   const overview = overviewResult.data?.overview as MedicalOverview | undefined
-  const latestRecord = latestRecordResult.data
+  const records = recordsResult.data ?? []
+  const latestRecord = records[0]
   const carePlanEvents = overview
     ? overview.important_medical_events.filter((item) =>
         isCarePlanOnly(item.event, item.date),
@@ -237,8 +340,13 @@ export default async function OverviewPage() {
     : []
   const importantEvents = overview
     ? combineSameDateEvents(
-        overview.important_medical_events.filter(
-          (item) => !isCarePlanOnly(item.event, item.date),
+        removeRedundantYearOnlyEvents(
+          applyKnownRecordDates(
+            overview.important_medical_events.filter(
+              (item) => !isCarePlanOnly(item.event, item.date),
+            ),
+            records,
+          ),
         ),
       )
     : []

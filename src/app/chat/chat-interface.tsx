@@ -43,7 +43,13 @@ export function ChatInterface() {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: trimmedQuestion }),
+        body: JSON.stringify({
+          question: trimmedQuestion,
+          recentMessages: messages.slice(-2).map(({ role, content }) => ({
+            role,
+            content,
+          })),
+        }),
       })
       const result = (await response.json()) as {
         answer?: string

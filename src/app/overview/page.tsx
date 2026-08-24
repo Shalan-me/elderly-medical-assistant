@@ -90,6 +90,43 @@ function isSymptomOrFinding(item: string) {
   )
 }
 
+function isNotableSymptomOrOngoingFinding(item: string) {
+  const text = item.trim()
+  const symptom =
+    /\b(?:shortness of breath|dyspnea|pain|fatigue|dizziness|nausea|cough|headache|swelling|weakness|palpitations)\b/i
+  const ongoingFinding =
+    /\b(?:persistent|ongoing|recurrent|intermittent|occasional)\b/i
+  const routineVitalOrLab =
+    /\b\d{2,3}\s*\/\s*\d{2,3}(?:\s*mmhg)?\b/i.test(text) ||
+    /\b(?:blood pressure|bp)\s+(?:measurements?|was|of)\b/i.test(text) ||
+    /\b(?:pulse|heart rate|temperature|respiratory rate)\b/i.test(text) ||
+    /\b(?:cholesterol|lipids?|glucose|creatinine|potassium)\b/i.test(text) ||
+    /\b(?:ecg|electrocardiogram)\b/i.test(text)
+
+  if (routineVitalOrLab) return false
+
+  const negativeSymptom = new RegExp(
+    `(?:\\b(?:no|without|den(?:y|ies|ied))\\b[^.;]*${symptom.source}|${symptom.source}[^.;]*\\b(?:not reported|denied|absent)\\b)`,
+    'i',
+  )
+  if (negativeSymptom.test(text) && !ongoingFinding.test(text)) return false
+
+  return (
+    symptom.test(text) ||
+    ongoingFinding.test(text) ||
+    /\b(?:elevated|high)\s+home\s+(?:blood pressure\s+)?readings?\b/i.test(text)
+  )
+}
+
+function symptomAndFindingPresentationParts(item: string) {
+  return item
+    .split(
+      /\s*;\s*|(?<=[.!?])\s+|,\s+(?=(?:no\b|without\b|den(?:y|ies|ied)\b|blood pressure\b|bp\b|pulse\b|heart rate\b|temperature\b|respiratory rate\b|cholesterol\b|lipids?\b|glucose\b|creatinine\b|potassium\b|ecg\b|electrocardiogram\b))/i,
+    )
+    .map((part) => part.trim())
+    .filter(Boolean)
+}
+
 function eventsBelongToSameVisit(first: string, second: string) {
   const visitContext = /\b(?:visit|consultation|check[- ]?up|appointment)\b/i
   const vitalOrFinding =
@@ -215,10 +252,14 @@ export default async function OverviewPage() {
       )
     : []
   const symptomsAndFindings = overview
-    ? uniqueText([
-        ...(overview.symptoms_and_findings ?? []),
-        ...overview.conditions.filter(isSymptomOrFinding),
-      ])
+    ? uniqueText(
+        [
+          ...(overview.symptoms_and_findings ?? []),
+          ...overview.conditions.filter(isSymptomOrFinding),
+        ]
+          .flatMap(symptomAndFindingPresentationParts)
+          .filter(isNotableSymptomOrOngoingFinding),
+      )
     : []
   const conditions = overview
     ? overview.conditions.filter((item) => !isSymptomOrFinding(item))

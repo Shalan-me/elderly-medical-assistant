@@ -36,6 +36,12 @@ function isCarePlanOnly(event: string, date: string | null) {
   )
 }
 
+function isEncounterReason(item: string) {
+  return /^(?:reason\s+for\s+(?:the\s+)?(?:visit|encounter)|(?:visit|encounter)\s+reason)\b\s*[:\u2014-]?/i.test(
+    item.trim(),
+  )
+}
+
 function normalizedTextKey(item: string) {
   return item.trim().toLocaleLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
 }
@@ -200,10 +206,13 @@ export default async function OverviewPage() {
       )
     : []
   const carePlans = overview
-    ? uniqueText([
-        ...(overview.follow_up_and_care_plans ?? []),
-        ...carePlanEvents.map((item) => item.event),
-      ], carePlanKey)
+    ? uniqueText(
+        [
+          ...(overview.follow_up_and_care_plans ?? []),
+          ...carePlanEvents.map((item) => item.event),
+        ].filter((item) => !isEncounterReason(item)),
+        carePlanKey,
+      )
     : []
   const symptomsAndFindings = overview
     ? uniqueText([

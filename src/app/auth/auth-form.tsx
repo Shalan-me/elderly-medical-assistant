@@ -8,6 +8,26 @@ import { createClient } from '@/lib/supabase/client'
 
 type AuthMode = 'login' | 'signup'
 
+function friendlyAuthError(error: unknown, isLogin: boolean) {
+  if (!(error instanceof Error)) return 'Something went wrong. Please try again.'
+  const message = error.message.toLowerCase()
+  if (message.includes('invalid login credentials')) {
+    return 'The email or password is not correct. Please try again.'
+  }
+  if (message.includes('email not confirmed')) {
+    return 'Please confirm your email before logging in.'
+  }
+  if (message.includes('already registered') || message.includes('already exists')) {
+    return 'An account with this email already exists. Please log in instead.'
+  }
+  if (message.includes('rate limit') || message.includes('too many')) {
+    return 'Too many attempts were made. Please wait a few minutes and try again.'
+  }
+  return isLogin
+    ? 'We could not log you in right now. Please try again.'
+    : 'We could not create your account right now. Please try again.'
+}
+
 export function AuthForm({
   mode,
   initialError = '',
@@ -61,7 +81,7 @@ export function AuthForm({
       setMessage('Account created. Please check your email and follow the confirmation link before logging in.')
       form.reset()
     } catch (authError) {
-      setError(authError instanceof Error ? authError.message : 'Something went wrong. Please try again.')
+      setError(friendlyAuthError(authError, isLogin))
     } finally {
       setIsSubmitting(false)
     }

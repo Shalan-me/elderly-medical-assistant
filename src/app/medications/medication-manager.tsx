@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { FormEvent, useMemo, useRef, useState } from 'react'
 
 import { createClient } from '@/lib/supabase/client'
+import { saveTakenMedicationDose } from '@/lib/supabase/medication-logs'
 
 export type Medication = {
   id: string
@@ -302,9 +303,9 @@ export function MedicationManager({
       resetForm()
     } catch (saveError) {
       setError(
-        saveError instanceof Error
+        saveError instanceof Error && saveError.message.includes('session has expired')
           ? saveError.message
-          : 'The medication could not be saved.',
+          : 'We could not save this medication. Please check the details and try again.',
       )
     } finally {
       setIsSaving(false)
@@ -320,37 +321,25 @@ export function MedicationManager({
     const supabase = createClient()
 
     try {
-      const { data: userData } = await supabase.auth.getUser()
-      if (!userData.user) throw new Error('Your session has expired.')
-      const takenAt = new Date().toISOString()
-      const { data, error: logError } = await supabase
-        .from('medication_logs')
-        .upsert(
-          {
-            user_id: userData.user.id,
-            medication_id: medication.id,
-            schedule_id: schedule.id,
-            scheduled_date: today,
-            status: 'taken',
-            taken_at: takenAt,
-          },
-          { onConflict: 'schedule_id,scheduled_date' },
-        )
-        .select('id, medication_id, schedule_id, scheduled_date, status, taken_at')
-        .single()
-      if (logError) throw logError
+      const data = await saveTakenMedicationDose(supabase, {
+        medicationId: medication.id,
+        scheduleId: schedule.id,
+        scheduledDate: today,
+      })
 
       setLogs((current) => [
         ...current.filter(
           (log) =>
             !(log.schedule_id === schedule.id && log.scheduled_date === today),
         ),
-        data as MedicationLog,
+        data,
       ])
       setMessage(`${medication.name} was marked as taken.`)
     } catch (logError) {
       setError(
-        logError instanceof Error ? logError.message : 'Could not mark this dose as taken.',
+        logError instanceof Error && logError.message.includes('session has expired')
+          ? logError.message
+          : 'We could not mark this dose as taken. Please try again.',
       )
     } finally {
       setBusyId(null)
@@ -381,12 +370,8 @@ export function MedicationManager({
       )
       if (editingMedication?.id === medication.id) resetForm()
       setMessage(`${medication.name} was deleted.`)
-    } catch (deleteError) {
-      setError(
-        deleteError instanceof Error
-          ? deleteError.message
-          : 'The medication could not be deleted.',
-      )
+    } catch {
+      setError('We could not delete this medication. Please try again.')
     } finally {
       setBusyId(null)
     }

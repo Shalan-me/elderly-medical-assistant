@@ -141,10 +141,14 @@ export function ChatInterface() {
             </article>
           ))
         )}
-        {isLoading ? <p className="chat-loading">Checking your records…</p> : null}
+        {isLoading ? (
+          <p className="chat-loading" role="status">
+            Checking your records… This may take a moment.
+          </p>
+        ) : null}
       </div>
 
-      {error ? <p className="form-alert error-alert">{error}</p> : null}
+      {error ? <p className="form-alert error-alert" role="alert">{error}</p> : null}
 
       <form className="chat-form" onSubmit={handleSubmit}>
         <label htmlFor="chat-question">Your question</label>

@@ -97,7 +97,7 @@ export default async function MedicationsPage() {
 
   const loadError =
     medicationsResult.error || schedulesResult.error || logsResult.error
-      ? 'We could not load your medication schedule. Confirm that the medication migration has been applied.'
+      ? 'We could not load your medication schedule right now. Please try again in a moment.'
       : ''
 
   return (

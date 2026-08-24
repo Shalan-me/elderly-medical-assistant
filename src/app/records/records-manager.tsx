@@ -49,6 +49,7 @@ export function RecordsManager({
   const [message, setMessage] = useState('')
   const [busyRecordId, setBusyRecordId] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState('')
 
   async function handleUpload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -74,6 +75,7 @@ export function RecordsManager({
     }
 
     setIsUploading(true)
+    setUploadProgress('Uploading your file…')
     const supabase = createClient()
 
     try {
@@ -108,6 +110,7 @@ export function RecordsManager({
       setVisibleRecords((currentRecords) => [newRecord, ...currentRecords])
       formRef.current?.reset()
       setMessage('Your record was uploaded and is being processed.')
+      setUploadProgress('Upload complete. AI is reading your record. This may take a minute…')
 
       const processingResponse = await fetch(`/api/records/${newRecord.id}/process`, {
         method: 'POST',
@@ -142,9 +145,14 @@ export function RecordsManager({
       )
       setMessage(processingResult.overviewWarning ?? 'Your medical record was processed successfully.')
     } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : 'Upload failed. Please try again.')
+      setError(
+        uploadError instanceof Error && uploadError.message.includes('session has expired')
+          ? uploadError.message
+          : 'We could not upload this record. Please check your connection and try again.',
+      )
     } finally {
       setIsUploading(false)
+      setUploadProgress('')
     }
   }
 
@@ -172,8 +180,8 @@ export function RecordsManager({
         currentRecords.filter((currentRecord) => currentRecord.id !== record.id),
       )
       setMessage(`${record.file_name} was deleted.`)
-    } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : 'Delete failed. Please try again.')
+    } catch {
+      setError('We could not delete this record. Please try again.')
     } finally {
       setBusyRecordId(null)
     }
@@ -193,7 +201,7 @@ export function RecordsManager({
         <section className="records-card" aria-labelledby="upload-heading">
           <h2 id="upload-heading">Upload a record</h2>
           <p>Accepted files: PDF, JPEG, PNG, or WebP. Maximum size: 10 MB.</p>
-          <form ref={formRef} className="auth-form" onSubmit={handleUpload}>
+          <form ref={formRef} className="auth-form" onSubmit={handleUpload} aria-busy={isUploading}>
             <div className="field-group">
               <label htmlFor="record-file">Choose a file</label>
               <input id="record-file" name="record-file" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" required disabled={isUploading} />
@@ -218,6 +226,11 @@ export function RecordsManager({
             <button className="primary-button" type="submit" disabled={isUploading}>
               {isUploading ? 'Uploading and processing…' : 'Upload record'}
             </button>
+            {uploadProgress && (
+              <p className="progress-state" role="status" aria-live="polite">
+                {uploadProgress}
+              </p>
+            )}
           </form>
         </section>
 
@@ -227,7 +240,10 @@ export function RecordsManager({
         <section className="records-card" aria-labelledby="records-heading">
           <h2 id="records-heading">Your uploaded records</h2>
           {visibleRecords.length === 0 ? (
-            <p className="empty-state">You have not uploaded any records yet.</p>
+            <div className="empty-state">
+              <strong>No medical records yet</strong>
+              <p>Use the upload form above to add your first PDF or image.</p>
+            </div>
           ) : (
             <ul className="records-list">
               {visibleRecords.map((record) => (

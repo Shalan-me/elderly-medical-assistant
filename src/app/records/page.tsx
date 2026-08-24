@@ -18,7 +18,7 @@ export default async function RecordsPage() {
     return (
       <RecordsManager
         records={[]}
-        initialError="We could not load your records. Confirm that the Supabase migration has been applied, then try again."
+        initialError="We could not load your medical records right now. Please try again in a moment."
       />
     )
   }

@@ -9,13 +9,28 @@ function TextList({ items }: { items: string[] }) {
 }
 
 function formatFriendlyDate(value: string) {
-  const date = /^\d{4}-\d{2}-\d{2}$/.test(value)
-    ? new Date(`${value}T00:00:00`)
-    : new Date(value)
+  if (/^\d{4}$/.test(value)) return value
+
+  const yearAndMonth = /^(\d{4})-(\d{2})$/.exec(value)
+  if (yearAndMonth) {
+    const [, year, month] = yearAndMonth
+    const date = new Date(Date.UTC(Number(year), Number(month) - 1, 1))
+    return new Intl.DateTimeFormat(undefined, {
+      month: 'long',
+      timeZone: 'UTC',
+      year: 'numeric',
+    }).format(date)
+  }
+
+  const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value)
+  const date = isDateOnly ? new Date(`${value}T00:00:00Z`) : new Date(value)
 
   return Number.isNaN(date.getTime())
     ? value
-    : new Intl.DateTimeFormat(undefined, { dateStyle: 'long' }).format(date)
+    : new Intl.DateTimeFormat(undefined, {
+        dateStyle: 'long',
+        timeZone: isDateOnly ? 'UTC' : undefined,
+      }).format(date)
 }
 
 export default async function OverviewPage() {
@@ -23,7 +38,7 @@ export default async function OverviewPage() {
   const { data: userData } = await supabase.auth.getUser()
   if (!userData.user) redirect('/login')
 
-  const [{ data }, { data: latestRecord }] = await Promise.all([
+  const [overviewResult, latestRecordResult] = await Promise.all([
     supabase
       .from('medical_overviews')
       .select('overview, updated_at')
@@ -37,7 +52,8 @@ export default async function OverviewPage() {
       .maybeSingle(),
   ])
 
-  const overview = data?.overview as MedicalOverview | undefined
+  const overview = overviewResult.data?.overview as MedicalOverview | undefined
+  const latestRecord = latestRecordResult.data
 
   return (
     <main className="records-page">
@@ -54,7 +70,12 @@ export default async function OverviewPage() {
           This overview is based only on your uploaded records. It is not a diagnosis or treatment recommendation. Always confirm medical information with a qualified healthcare professional.
         </p>
 
-        {!overview ? (
+        {overviewResult.error ? (
+          <section className="records-card" role="alert">
+            <h2>We could not load your overview</h2>
+            <p>Please try opening this page again in a moment.</p>
+          </section>
+        ) : !overview ? (
           <section className="records-card">
             <h2>No overview yet</h2>
             <p>Upload a medical record and wait for processing to finish.</p>
@@ -69,7 +90,7 @@ export default async function OverviewPage() {
                   <p key={index}>{paragraph}</p>
                 ))}
               </div>
-              <p className="overview-timestamp">Overview updated {new Intl.DateTimeFormat(undefined, { dateStyle: 'long', timeStyle: 'short' }).format(new Date(data!.updated_at))}</p>
+              <p className="overview-timestamp">Overview updated {new Intl.DateTimeFormat(undefined, { dateStyle: 'long', timeStyle: 'short' }).format(new Date(overviewResult.data!.updated_at))}</p>
             </section>
 
             {latestRecord && (
@@ -80,7 +101,7 @@ export default async function OverviewPage() {
                 <p>
                   Report date: {latestRecord.document_date
                     ? formatFriendlyDate(latestRecord.document_date)
-                    : 'Not listed'}
+                    : 'Not documented'}
                 </p>
                 <p className="field-help">
                   Added to your history {formatFriendlyDate(latestRecord.processed_at)}
